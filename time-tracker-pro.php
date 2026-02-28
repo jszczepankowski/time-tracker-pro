@@ -373,9 +373,6 @@ class TimeTrackerPro {
         
         // Dodaj style admina
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
-
-        // Upewnij się, że migracja projektów jest zastosowana także po aktualizacji wtyczki
-        $this->ensure_project_schema();
     }
     
     public function enqueue_admin_scripts($hook) {
@@ -500,15 +497,6 @@ class TimeTrackerPro {
             'generate_reports',
             'time-tracker-reports',
             array($this, 'admin_reports_page')
-        );
-
-        add_submenu_page(
-            'time-tracker',
-            'Projekty',
-            'Projekty',
-            'manage_clients',
-            'time-tracker-projects',
-            array($this, 'admin_projects_page')
         );
         
         add_submenu_page(
@@ -685,47 +673,7 @@ class TimeTrackerPro {
     public function ajax_get_client_projects_nopriv() {
         wp_send_json_error('Brak dostępu');
     }
-
-    private function ensure_project_schema() {
-        global $wpdb;
-
-        $projects_table = $wpdb->prefix . 'time_tracker_projects';
-        $entries_table = $wpdb->prefix . 'time_tracker_entries';
-
-        $project_table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $projects_table));
-        if ($project_table_exists !== $projects_table) {
-            require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-            $charset_collate = $wpdb->get_charset_collate();
-            $sql = "CREATE TABLE IF NOT EXISTS {$projects_table} (
-                id int(11) NOT NULL AUTO_INCREMENT,
-                client_id int(11) NOT NULL,
-                project_name varchar(255) NOT NULL,
-                month int(2) NOT NULL,
-                year int(4) NOT NULL,
-                created_by int(11) NOT NULL,
-                created_at datetime DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (id),
-                UNIQUE KEY unique_client_project_period (client_id, project_name, month, year),
-                KEY client_id (client_id),
-                KEY month_year (month, year)
-            ) {$charset_collate};";
-            dbDelta($sql);
-        }
-
-        $project_column = $wpdb->get_var("SHOW COLUMNS FROM {$entries_table} LIKE 'project_id'");
-        if (!$project_column) {
-            $wpdb->query("ALTER TABLE {$entries_table} ADD COLUMN project_id int(11) NULL AFTER service_id");
-            $project_column = $wpdb->get_var("SHOW COLUMNS FROM {$entries_table} LIKE 'project_id'");
-        }
-
-        $project_table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $projects_table));
-        if ($project_table_exists !== $projects_table || !$project_column) {
-            return false;
-        }
-
-        return true;
-    }
-
+    
     // Admin pages
     public function admin_dashboard_page() {
         if (!current_user_can('manage_time_tracker')) {
@@ -1407,10 +1355,6 @@ class TimeTrackerPro {
 
         global $wpdb;
 
-        if (!$this->ensure_project_schema()) {
-            wp_die('Nie udało się przygotować struktury projektów w bazie danych.');
-        }
-
         $client_id = isset($_POST['client_id']) ? intval($_POST['client_id']) : 0;
         $month = isset($_POST['month']) ? intval($_POST['month']) : intval(date('n'));
         $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
@@ -1441,7 +1385,7 @@ class TimeTrackerPro {
             );
         }
 
-        wp_redirect(admin_url('admin.php?page=time-tracker-projects&project_saved=1&month=' . $month . '&year=' . $year));
+        wp_redirect(admin_url('admin.php?page=time-tracker-clients&project_saved=1'));
         exit;
     }
 
@@ -1457,7 +1401,7 @@ class TimeTrackerPro {
             $wpdb->delete("{$wpdb->prefix}time_tracker_projects", array('id' => $project_id));
         }
 
-        wp_redirect(admin_url('admin.php?page=time-tracker-projects&project_deleted=1'));
+        wp_redirect(admin_url('admin.php?page=time-tracker-reports&project_deleted=1'));
         exit;
     }
     
@@ -2079,109 +2023,6 @@ class TimeTrackerPro {
         exit;
     }
     
-    public function admin_projects_page() {
-        if (!current_user_can('manage_clients')) {
-            wp_die('Brak uprawnień');
-        }
-
-        if (!$this->ensure_project_schema()) {
-            echo '<div class="notice notice-error"><p>Nie udało się zainicjalizować tabel projektów. Sprawdź uprawnienia użytkownika bazy danych.</p></div>';
-            return;
-        }
-
-        $month = isset($_GET['month']) ? intval($_GET['month']) : date('n');
-        $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
-
-        global $wpdb;
-        $clients = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}time_tracker_clients WHERE active = 1 ORDER BY company_name");
-
-        $projects = $wpdb->get_results($wpdb->prepare(
-            "SELECT p.*, c.company_name
-             FROM {$wpdb->prefix}time_tracker_projects p
-             LEFT JOIN {$wpdb->prefix}time_tracker_clients c ON p.client_id = c.id
-             WHERE p.month = %d AND p.year = %d
-             ORDER BY c.company_name, p.project_name",
-            $month,
-            $year
-        ));
-        ?>
-        <div class="wrap">
-            <h1>Projekty klientów</h1>
-
-            <?php if (isset($_GET['project_saved']) && $_GET['project_saved'] == '1'): ?>
-                <div class="notice notice-success is-dismissible"><p>Projekt został zapisany.</p></div>
-            <?php endif; ?>
-            <?php if (isset($_GET['project_deleted']) && $_GET['project_deleted'] == '1'): ?>
-                <div class="notice notice-success is-dismissible"><p>Projekt został usunięty.</p></div>
-            <?php endif; ?>
-
-            <form method="post" action="">
-                <?php wp_nonce_field('save_project', 'project_nonce'); ?>
-                <table class="form-table">
-                    <tr>
-                        <th><label for="project_client_id">Klient</label></th>
-                        <td>
-                            <select name="client_id" id="project_client_id" required>
-                                <option value="">Wybierz klienta...</option>
-                                <?php foreach ($clients as $client): ?>
-                                    <option value="<?php echo $client->id; ?>"><?php echo esc_html($client->company_name); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="project_name">Nazwa projektu</label></th>
-                        <td><input type="text" name="project_name" id="project_name" class="regular-text" required></td>
-                    </tr>
-                    <tr>
-                        <th><label for="project_month">Miesiąc</label></th>
-                        <td>
-                            <select name="month" id="project_month" required>
-                                <?php for ($i = 1; $i <= 12; $i++): ?>
-                                    <option value="<?php echo $i; ?>" <?php selected($i, $month); ?>><?php echo date_i18n('F', mktime(0, 0, 0, $i, 1)); ?></option>
-                                <?php endfor; ?>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="project_year">Rok</label></th>
-                        <td>
-                            <select name="year" id="project_year" required>
-                                <?php for ($i = date('Y') - 2; $i <= date('Y') + 1; $i++): ?>
-                                    <option value="<?php echo $i; ?>" <?php selected($i, $year); ?>><?php echo $i; ?></option>
-                                <?php endfor; ?>
-                            </select>
-                        </td>
-                    </tr>
-                </table>
-                <p><input type="submit" name="save_project" class="button button-primary" value="Dodaj projekt"></p>
-            </form>
-
-            <hr>
-            <h2>Lista projektów: <?php echo date_i18n('F Y', mktime(0, 0, 0, $month, 1, $year)); ?></h2>
-            <?php if (empty($projects)): ?>
-                <p>Brak projektów dla wybranego okresu.</p>
-            <?php else: ?>
-                <table class="wp-list-table widefat fixed striped">
-                    <thead><tr><th>Klient</th><th>Projekt</th><th>Miesiąc/Rok</th><th>Akcje</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($projects as $project): ?>
-                        <tr>
-                            <td><?php echo esc_html($project->company_name); ?></td>
-                            <td><?php echo esc_html($project->project_name); ?></td>
-                            <td><?php echo intval($project->month) . '/' . intval($project->year); ?></td>
-                            <td>
-                                <a class="button button-small button-danger" href="<?php echo wp_nonce_url(admin_url('admin.php?page=time-tracker-projects&time_tracker_action=delete_project&id=' . $project->id), 'delete_project_' . $project->id); ?>" onclick="return confirm('Czy na pewno chcesz usunąć ten projekt?');">Usuń</a>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
-        </div>
-        <?php
-    }
-
     public function admin_reports_page() {
         if (!current_user_can('generate_reports')) {
             wp_die('Brak uprawnień');
@@ -2190,27 +2031,11 @@ class TimeTrackerPro {
         $month = isset($_GET['month']) ? intval($_GET['month']) : date('n');
         $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
         $client_id = isset($_GET['client_id']) ? $_GET['client_id'] : 'all';
-
-        global $wpdb;
-        $clients = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}time_tracker_clients WHERE active = 1 ORDER BY company_name");
         
         ?>
         <div class="wrap">
             <h1>Zestawienia</h1>
-            <p><a class="button" href="<?php echo admin_url('admin.php?page=time-tracker-projects'); ?>">Przejdź do modułu Projektów</a></p>
-
-            <?php if (isset($_GET['project_saved']) && $_GET['project_saved'] == '1'): ?>
-                <div class="notice notice-success is-dismissible">
-                    <p>Projekt został zapisany.</p>
-                </div>
-            <?php endif; ?>
-
-            <?php if (isset($_GET['project_deleted']) && $_GET['project_deleted'] == '1'): ?>
-                <div class="notice notice-success is-dismissible">
-                    <p>Projekt został usunięty.</p>
-                </div>
-            <?php endif; ?>
-
+            
             <div class="report-generator">
                 <h3>Generuj zestawienie miesięczne</h3>
                 <form method="get" action="">
@@ -2246,7 +2071,10 @@ class TimeTrackerPro {
                             <td>
                                 <select name="client_id" id="client_id">
                                     <option value="all" <?php selected($client_id, 'all'); ?>>Wszyscy klienci</option>
-                                    <?php foreach ($clients as $client): ?>
+                                    <?php
+                                    global $wpdb;
+                                    $clients = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}time_tracker_clients WHERE active = 1 ORDER BY company_name");
+                                    foreach ($clients as $client): ?>
                                         <option value="<?php echo $client->id; ?>" <?php selected($client_id, $client->id); ?>>
                                             <?php echo esc_html($client->company_name); ?>
                                         </option>
@@ -2739,7 +2567,7 @@ class TimeTrackerPro {
 
                     <div class="form-group">
                         <label for="project_id">Projekt: *</label>
-                        <select name="project_id" id="project_id" disabled>
+                        <select name="project_id" id="project_id" required disabled>
                             <option value="">Najpierw wybierz klienta i datę</option>
                         </select>
                         <small>Możesz wybrać istniejący projekt lub podać nowy poniżej.</small>
@@ -2953,11 +2781,6 @@ class TimeTrackerPro {
             'status' => isset($data['status']) ? sanitize_text_field($data['status']) : 'draft'
         );
 
-        if (!$this->ensure_project_schema()) {
-            echo '<div class="error"><p>Brak struktury projektów w bazie danych (tabela/kolumna). Skontaktuj się z administratorem.</p></div>';
-            return false;
-        }
-
         // Projekt: istniejący lub nowy (tworzony per klient/miesiąc/rok)
         $project_id = isset($data['project_id']) ? intval($data['project_id']) : 0;
         $new_project_name = isset($data['new_project_name']) ? sanitize_text_field($data['new_project_name']) : '';
@@ -3069,8 +2892,7 @@ class TimeTrackerPro {
             
             return true;
         } else {
-            $db_error = !empty($wpdb->last_error) ? $wpdb->last_error : 'Nieznany błąd bazy danych';
-            echo '<div class="error"><p>Wystąpił błąd podczas dodawania wpisu: ' . esc_html($db_error) . '.</p></div>';
+            echo '<div class="error"><p>Wystąpił błąd podczas dodawania wpisu.</p></div>';
             return false;
         }
     }

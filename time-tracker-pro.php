@@ -59,6 +59,8 @@ class TimeTrackerPro {
         // AJAX handlers
         add_action('wp_ajax_get_client_services', array($this, 'ajax_get_client_services'));
         add_action('wp_ajax_nopriv_get_client_services', array($this, 'ajax_get_client_services_nopriv'));
+        add_action('wp_ajax_get_client_projects', array($this, 'ajax_get_client_projects'));
+        add_action('wp_ajax_nopriv_get_client_projects', array($this, 'ajax_get_client_projects_nopriv'));
     }
     
     public function activate() {
@@ -117,6 +119,7 @@ class TimeTrackerPro {
             employee_id int(11) NOT NULL,
             client_id int(11) NOT NULL,
             service_id int(11) NOT NULL,
+            project_id int(11),
             entry_date date NOT NULL,
             hours decimal(4,2),
             fixed_amount decimal(10,2),
@@ -132,8 +135,24 @@ class TimeTrackerPro {
             KEY employee_id (employee_id),
             KEY client_id (client_id),
             KEY service_id (service_id),
+            KEY project_id (project_id),
             KEY entry_date (entry_date),
             KEY status (status)
+        ) $charset_collate;";
+
+        // Tabela projektów klienta (miesięcznych)
+        $sql5 = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}time_tracker_projects (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            client_id int(11) NOT NULL,
+            project_name varchar(255) NOT NULL,
+            month int(2) NOT NULL,
+            year int(4) NOT NULL,
+            created_by int(11) NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY unique_client_project_period (client_id, project_name, month, year),
+            KEY client_id (client_id),
+            KEY month_year (month, year)
         ) $charset_collate;";
         
         // Tabela faktur (dodana dla przyszłych funkcji)
@@ -161,6 +180,7 @@ class TimeTrackerPro {
         dbDelta($sql2);
         dbDelta($sql3);
         dbDelta($sql4);
+        dbDelta($sql5);
     }
     
     private function add_sample_data() {
@@ -388,10 +408,20 @@ class TimeTrackerPro {
         if (isset($_POST['save_service']) && isset($_POST['service_nonce'])) {
             $this->save_service();
         }
+
+        // Dodawanie projektu
+        if (isset($_POST['save_project']) && isset($_POST['project_nonce'])) {
+            $this->save_project();
+        }
         
         // Usuwanie usługi
         if (isset($_GET['time_tracker_action']) && $_GET['time_tracker_action'] == 'delete_service' && isset($_GET['id'])) {
             $this->delete_service();
+        }
+
+        // Usuwanie projektu
+        if (isset($_GET['time_tracker_action']) && $_GET['time_tracker_action'] == 'delete_project' && isset($_GET['id'])) {
+            $this->delete_project();
         }
         
         // Zatwierdzanie wpisów
@@ -605,6 +635,42 @@ class TimeTrackerPro {
     }
     
     public function ajax_get_client_services_nopriv() {
+        wp_send_json_error('Brak dostępu');
+    }
+
+    public function ajax_get_client_projects() {
+        if (!isset($_POST['nonce']) || !isset($_POST['client_id'])) {
+            wp_send_json_error('Brak wymaganych danych');
+        }
+
+        check_ajax_referer('get_services_nonce', 'nonce');
+
+        $client_id = intval($_POST['client_id']);
+        $month = isset($_POST['month']) ? intval($_POST['month']) : intval(date('n'));
+        $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
+
+        if (!$client_id || $month < 1 || $month > 12 || $year < 2000 || $year > 2100) {
+            wp_send_json_error('Nieprawidłowe dane');
+        }
+
+        global $wpdb;
+
+        $projects = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, project_name
+             FROM {$wpdb->prefix}time_tracker_projects
+             WHERE client_id = %d
+               AND month = %d
+               AND year = %d
+             ORDER BY project_name",
+            $client_id,
+            $month,
+            $year
+        ));
+
+        wp_send_json_success(is_array($projects) ? $projects : array());
+    }
+
+    public function ajax_get_client_projects_nopriv() {
         wp_send_json_error('Brak dostępu');
     }
     
@@ -1281,6 +1347,63 @@ class TimeTrackerPro {
         wp_redirect(admin_url('admin.php?page=time-tracker-client-services&client_id=' . $client_id . '&service_deleted=1'));
         exit;
     }
+
+    private function save_project() {
+        if (!wp_verify_nonce($_POST['project_nonce'], 'save_project')) {
+            wp_die('Błąd bezpieczeństwa');
+        }
+
+        global $wpdb;
+
+        $client_id = isset($_POST['client_id']) ? intval($_POST['client_id']) : 0;
+        $month = isset($_POST['month']) ? intval($_POST['month']) : intval(date('n'));
+        $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
+        $project_name = isset($_POST['project_name']) ? sanitize_text_field($_POST['project_name']) : '';
+
+        if (!$client_id || empty($project_name) || $month < 1 || $month > 12 || $year < 2000 || $year > 2100) {
+            wp_die('Nieprawidłowe dane projektu');
+        }
+
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}time_tracker_projects WHERE client_id = %d AND project_name = %s AND month = %d AND year = %d",
+            $client_id,
+            $project_name,
+            $month,
+            $year
+        ));
+
+        if (!$exists) {
+            $wpdb->insert(
+                "{$wpdb->prefix}time_tracker_projects",
+                array(
+                    'client_id' => $client_id,
+                    'project_name' => $project_name,
+                    'month' => $month,
+                    'year' => $year,
+                    'created_by' => get_current_user_id()
+                )
+            );
+        }
+
+        wp_redirect(admin_url('admin.php?page=time-tracker-clients&project_saved=1'));
+        exit;
+    }
+
+    private function delete_project() {
+        $project_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
+        if (!wp_verify_nonce($_GET['_wpnonce'], 'delete_project_' . $project_id)) {
+            wp_die('Błąd bezpieczeństwa');
+        }
+
+        if ($project_id > 0) {
+            global $wpdb;
+            $wpdb->delete("{$wpdb->prefix}time_tracker_projects", array('id' => $project_id));
+        }
+
+        wp_redirect(admin_url('admin.php?page=time-tracker-reports&project_deleted=1'));
+        exit;
+    }
     
     public function admin_entries_page() {
         if (!current_user_can('view_all_time_entries')) {
@@ -1450,10 +1573,12 @@ class TimeTrackerPro {
                 "SELECT te.*, 
                         c.company_name,
                         cs.service_name,
+                        p.project_name,
                         u.display_name as employee_name
                  FROM {$wpdb->prefix}time_tracker_entries te
                  LEFT JOIN {$wpdb->prefix}time_tracker_clients c ON te.client_id = c.id
                  LEFT JOIN {$wpdb->prefix}time_tracker_client_services cs ON te.service_id = cs.id
+                 LEFT JOIN {$wpdb->prefix}time_tracker_projects p ON te.project_id = p.id
                  LEFT JOIN {$wpdb->prefix}users u ON te.employee_id = u.ID
                  WHERE $where_clause
                  ORDER BY te.entry_date DESC, te.created_at DESC
@@ -1472,6 +1597,7 @@ class TimeTrackerPro {
                             <th>Data</th>
                             <th>Pracownik</th>
                             <th>Klient</th>
+                            <th>Projekt</th>
                             <th>Usługa</th>
                             <th>Godziny/Kwota</th>
                             <th>Status</th>
@@ -1484,6 +1610,7 @@ class TimeTrackerPro {
                             <td><?php echo date('d.m.Y', strtotime($entry->entry_date)); ?></td>
                             <td><?php echo esc_html($entry->employee_name); ?></td>
                             <td><?php echo esc_html($entry->company_name); ?></td>
+                            <td><?php echo !empty($entry->project_name) ? esc_html($entry->project_name) : '-'; ?></td>
                             <td><?php echo esc_html($entry->service_name); ?></td>
                             <td>
                                 <?php 
@@ -1571,6 +1698,7 @@ class TimeTrackerPro {
              FROM {$wpdb->prefix}time_tracker_entries te
              LEFT JOIN {$wpdb->prefix}time_tracker_clients c ON te.client_id = c.id
              LEFT JOIN {$wpdb->prefix}time_tracker_client_services cs ON te.service_id = cs.id
+             LEFT JOIN {$wpdb->prefix}time_tracker_projects p ON te.project_id = p.id
              LEFT JOIN {$wpdb->prefix}users u ON te.employee_id = u.ID
              WHERE te.id = %d",
             $entry_id
@@ -1991,10 +2119,12 @@ class TimeTrackerPro {
                     cs.service_name,
                     cs.hourly_rate,
                     cs.is_fixed_price,
+                    p.project_name,
                     u.display_name as employee_name
              FROM {$wpdb->prefix}time_tracker_entries te
              LEFT JOIN {$wpdb->prefix}time_tracker_clients c ON te.client_id = c.id
              LEFT JOIN {$wpdb->prefix}time_tracker_client_services cs ON te.service_id = cs.id
+             LEFT JOIN {$wpdb->prefix}time_tracker_projects p ON te.project_id = p.id
              LEFT JOIN {$wpdb->prefix}users u ON te.employee_id = u.ID
              $where_clause
              ORDER BY c.company_name, te.entry_date, u.display_name",
@@ -2020,7 +2150,8 @@ class TimeTrackerPro {
                     'entries' => array(),
                     'total_hours' => 0,
                     'total_amount' => 0,
-                    'services_summary' => array()
+                    'services_summary' => array(),
+                    'projects_summary' => array()
                 );
             }
             $grouped_entries[$entry->client_id]['entries'][] = $entry;
@@ -2052,6 +2183,20 @@ class TimeTrackerPro {
             $grouped_entries[$entry->client_id]['services_summary'][$service_key]['total_hours'] += $hours;
             $grouped_entries[$entry->client_id]['services_summary'][$service_key]['total_amount'] += $amount;
             $grouped_entries[$entry->client_id]['services_summary'][$service_key]['entries_count']++;
+
+            // Grupowanie po projekcie
+            $project_name = !empty($entry->project_name) ? $entry->project_name : 'Bez projektu';
+            if (!isset($grouped_entries[$entry->client_id]['projects_summary'][$project_name])) {
+                $grouped_entries[$entry->client_id]['projects_summary'][$project_name] = array(
+                    'project_name' => $project_name,
+                    'entries_count' => 0,
+                    'total_hours' => 0,
+                    'total_amount' => 0
+                );
+            }
+            $grouped_entries[$entry->client_id]['projects_summary'][$project_name]['entries_count']++;
+            $grouped_entries[$entry->client_id]['projects_summary'][$project_name]['total_hours'] += $hours;
+            $grouped_entries[$entry->client_id]['projects_summary'][$project_name]['total_amount'] += $amount;
             
             // Sumy ogólne
             $grand_total_hours += $hours;
@@ -2116,6 +2261,30 @@ class TimeTrackerPro {
                     </table>
                 </div>
                 
+                <div class="project-summary-section">
+                    <h4>Podsumowanie projektów</h4>
+                    <table class="wp-list-table widefat fixed striped">
+                        <thead>
+                            <tr>
+                                <th>Projekt</th>
+                                <th>Liczba wpisów</th>
+                                <th>Łączna liczba godzin</th>
+                                <th>Łączna kwota</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($client_data['projects_summary'] as $project_summary): ?>
+                            <tr>
+                                <td><?php echo esc_html($project_summary['project_name']); ?></td>
+                                <td><?php echo intval($project_summary['entries_count']); ?></td>
+                                <td><?php echo number_format(floatval($project_summary['total_hours']), 2); ?> h</td>
+                                <td><?php echo number_format(floatval($project_summary['total_amount']), 2); ?> zł</td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
                 <div class="details-section">
                     <h4>Szczegółowe wpisy <small>(kliknij aby rozwinąć)</small></h4>
                     <div class="details-collapse">
@@ -2124,6 +2293,7 @@ class TimeTrackerPro {
                                 <tr>
                                     <th>Data</th>
                                     <th>Pracownik</th>
+                                    <th>Projekt</th>
                                     <th>Usługa</th>
                                     <th>Godziny</th>
                                     <th>Stawka</th>
@@ -2140,6 +2310,7 @@ class TimeTrackerPro {
                                 <tr>
                                     <td><?php echo date('d.m.Y', strtotime($entry->entry_date)); ?></td>
                                     <td><?php echo esc_html($entry->employee_name); ?></td>
+                                    <td><?php echo !empty($entry->project_name) ? esc_html($entry->project_name) : '-'; ?></td>
                                     <td><?php echo esc_html($entry->service_name); ?></td>
                                     <td><?php echo $hours > 0 ? number_format($hours, 2) . ' h' : '-'; ?></td>
                                     <td><?php echo $rate > 0 ? number_format($rate, 2) . ' zł/h' : 'Ryczałt'; ?></td>
@@ -2393,6 +2564,20 @@ class TimeTrackerPro {
                         <input type="date" name="entry_date" id="entry_date" 
                                value="<?php echo date('Y-m-d'); ?>" required>
                     </div>
+
+                    <div class="form-group">
+                        <label for="project_id">Projekt: *</label>
+                        <select name="project_id" id="project_id" required disabled>
+                            <option value="">Najpierw wybierz klienta i datę</option>
+                        </select>
+                        <small>Możesz wybrać istniejący projekt lub podać nowy poniżej.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="new_project_name">Nowy projekt (opcjonalnie)</label>
+                        <input type="text" name="new_project_name" id="new_project_name" maxlength="255" placeholder="np. Wdrożenie CRM - marzec">
+                        <small>Jeśli wpiszesz nazwę, projekt zostanie utworzony dla wybranego klienta i miesiąca daty wpisu.</small>
+                    </div>
                     
                     <div class="form-group">
                         <label for="service_id">Usługa: *</label>
@@ -2433,12 +2618,61 @@ class TimeTrackerPro {
         
         <script>
         jQuery(document).ready(function($) {
+            function getSelectedMonth() {
+                var dateVal = $('#entry_date').val();
+                if (!dateVal) {
+                    var d = new Date();
+                    return {month: d.getMonth() + 1, year: d.getFullYear()};
+                }
+                var parts = dateVal.split('-');
+                return {year: parseInt(parts[0], 10), month: parseInt(parts[1], 10)};
+            }
+
+            function loadProjects() {
+                var clientId = $('#client_id').val();
+                var selected = getSelectedMonth();
+
+                if (!clientId) {
+                    $('#project_id').prop('disabled', true).html('<option value="">Najpierw wybierz klienta i datę</option>');
+                    return;
+                }
+
+                $('#project_id').prop('disabled', false).html('<option value="">Ładowanie projektów...</option>');
+
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'get_client_projects',
+                        client_id: clientId,
+                        month: selected.month,
+                        year: selected.year,
+                        nonce: '<?php echo wp_create_nonce("get_services_nonce"); ?>'
+                    },
+                    success: function(response) {
+                        var options = '<option value="">Wybierz projekt...</option>';
+                        if (response.success && response.data.length) {
+                            $.each(response.data, function(index, project) {
+                                options += '<option value="' + project.id + '">' + project.project_name + '</option>';
+                            });
+                        } else {
+                            options += '<option value="" disabled>Brak projektów dla tego miesiąca</option>';
+                        }
+                        $('#project_id').html(options);
+                    },
+                    error: function() {
+                        $('#project_id').html('<option value="">Błąd ładowania projektów</option>');
+                    }
+                });
+            }
+
             // Dynamiczne ładowanie usług dla klienta
             $('#client_id').change(function() {
                 var clientId = $(this).val();
                 if (clientId) {
                     $('#service_id').prop('disabled', false);
-                    
+                    loadProjects();
+
                     $.ajax({
                         url: '<?php echo admin_url('admin-ajax.php'); ?>',
                         type: 'POST',
@@ -2455,21 +2689,25 @@ class TimeTrackerPro {
                                 });
                                 $('#service_id').html(options);
                             }
-                        },
-                        error: function() {
-                            alert('Błąd podczas ładowania usług.');
                         }
                     });
                 } else {
                     $('#service_id').prop('disabled', true).html('<option value="">Najpierw wybierz klienta</option>');
+                    $('#project_id').prop('disabled', true).html('<option value="">Najpierw wybierz klienta i datę</option>');
                 }
             });
-            
+
+            $('#entry_date').change(function() {
+                if ($('#client_id').val()) {
+                    loadProjects();
+                }
+            });
+
             // Przełączanie między godzinami a kwotą ryczałtową
             $('#service_id').change(function() {
                 var selectedOption = $(this).find('option:selected');
                 var isFixed = selectedOption.data('is-fixed');
-                
+
                 if (isFixed == 1) {
                     $('#hours-field').hide();
                     $('#hours').val('').prop('required', false);
@@ -2482,20 +2720,19 @@ class TimeTrackerPro {
                     $('#fixed_amount').val('').prop('required', false);
                 }
             });
-            
+
             // Zapisz jako szkic
             $('#save-draft').click(function() {
                 $('#entry_status').val('draft');
                 $('#time-entry-form').submit();
             });
-            
+
             // Domyślnie zapisz jako zgłoszony
             $('input[name="submit_time_entry"]').click(function() {
                 $('#entry_status').val('submitted');
             });
         });
-        </script>
-        <?php
+        </script>        <?php
         return ob_get_clean();
     }
     
@@ -2543,6 +2780,65 @@ class TimeTrackerPro {
             'description' => isset($data['description']) ? sanitize_textarea_field($data['description']) : '',
             'status' => isset($data['status']) ? sanitize_text_field($data['status']) : 'draft'
         );
+
+        // Projekt: istniejący lub nowy (tworzony per klient/miesiąc/rok)
+        $project_id = isset($data['project_id']) ? intval($data['project_id']) : 0;
+        $new_project_name = isset($data['new_project_name']) ? sanitize_text_field($data['new_project_name']) : '';
+
+        $entry_month = intval(date('n', strtotime($entry_data['entry_date'])));
+        $entry_year = intval(date('Y', strtotime($entry_data['entry_date'])));
+
+        if (!empty($new_project_name)) {
+            $existing_project_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$wpdb->prefix}time_tracker_projects WHERE client_id = %d AND project_name = %s AND month = %d AND year = %d",
+                $entry_data['client_id'],
+                $new_project_name,
+                $entry_month,
+                $entry_year
+            ));
+
+            if ($existing_project_id) {
+                $project_id = intval($existing_project_id);
+            } else {
+                $project_inserted = $wpdb->insert(
+                    "{$wpdb->prefix}time_tracker_projects",
+                    array(
+                        'client_id' => $entry_data['client_id'],
+                        'project_name' => $new_project_name,
+                        'month' => $entry_month,
+                        'year' => $entry_year,
+                        'created_by' => $current_user->ID
+                    )
+                );
+
+                if (!$project_inserted) {
+                    echo '<div class="error"><p>Nie udało się utworzyć projektu.</p></div>';
+                    return false;
+                }
+
+                $project_id = intval($wpdb->insert_id);
+            }
+        }
+
+        if ($project_id <= 0) {
+            echo '<div class="error"><p>Wybierz projekt lub podaj nazwę nowego projektu.</p></div>';
+            return false;
+        }
+
+        $project_valid = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}time_tracker_projects WHERE id = %d AND client_id = %d AND month = %d AND year = %d",
+            $project_id,
+            $entry_data['client_id'],
+            $entry_month,
+            $entry_year
+        ));
+
+        if (!$project_valid) {
+            echo '<div class="error"><p>Wybrany projekt nie pasuje do klienta lub miesiąca wpisu.</p></div>';
+            return false;
+        }
+
+        $entry_data['project_id'] = $project_id;
         
         // Sprawdź czy usługa ma stawkę godzinową czy ryczałt
         $service = $wpdb->get_row($wpdb->prepare(
@@ -2615,17 +2911,19 @@ class TimeTrackerPro {
         
         $summary = $wpdb->get_results($wpdb->prepare(
             "SELECT c.company_name,
+                    p.project_name,
                     SUM(CASE WHEN cs.is_fixed_price = 0 THEN te.hours ELSE 0 END) as total_hours,
-                    COUNT(DISTINCT te.client_id) as client_count
+                    COUNT(*) as entry_count
              FROM {$wpdb->prefix}time_tracker_entries te
              LEFT JOIN {$wpdb->prefix}time_tracker_clients c ON te.client_id = c.id
              LEFT JOIN {$wpdb->prefix}time_tracker_client_services cs ON te.service_id = cs.id
+             LEFT JOIN {$wpdb->prefix}time_tracker_projects p ON te.project_id = p.id
              WHERE te.employee_id = %d
                AND MONTH(te.entry_date) = %d
                AND YEAR(te.entry_date) = %d
                AND te.status = 'approved'
-             GROUP BY te.client_id
-             ORDER BY total_hours DESC",
+             GROUP BY te.client_id, te.project_id
+             ORDER BY c.company_name ASC, p.project_name ASC",
             $current_user->ID, $current_month, $current_year
         ));
         
@@ -2645,6 +2943,7 @@ class TimeTrackerPro {
                     <thead>
                         <tr>
                             <th>Klient</th>
+                            <th>Projekt</th>
                             <th>Łączna liczba godzin</th>
                         </tr>
                     </thead>
@@ -2655,6 +2954,7 @@ class TimeTrackerPro {
                         ?>
                         <tr>
                             <td><?php echo esc_html($item->company_name); ?></td>
+                            <td><?php echo !empty($item->project_name) ? esc_html($item->project_name) : '-'; ?></td>
                             <td><?php echo number_format(floatval($item->total_hours), 2); ?> h</td>
                         </tr>
                         <?php endforeach; ?>
@@ -2747,6 +3047,7 @@ class TimeTrackerPro {
              FROM {$wpdb->prefix}time_tracker_entries te
              LEFT JOIN {$wpdb->prefix}time_tracker_clients c ON te.client_id = c.id
              LEFT JOIN {$wpdb->prefix}time_tracker_client_services cs ON te.service_id = cs.id
+             LEFT JOIN {$wpdb->prefix}time_tracker_projects p ON te.project_id = p.id
              LEFT JOIN {$wpdb->prefix}users u ON te.employee_id = u.ID
              WHERE te.id = %d",
             $entry_id

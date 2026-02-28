@@ -1,0 +1,325 @@
+/* Podstawowe style dla panelu admina Time Tracker */
+
+.time-tracker-widgets {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.time-tracker-widgets .widget {
+    flex: 1;
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    border-radius: 4px;
+}
+
+.time-tracker-widgets .widget h3 {
+    margin-top: 0;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.status-indicator.active {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-indicator.inactive {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.status-draft { background: #f0ad4e; color: white; }
+.status-submitted { background: #5bc0de; color: white; }
+.status-approved { background: #5cb85c; color: white; }
+.status-rejected { background: #d9534f; color: white; }
+
+/* Buttons */
+.button-danger {
+    color: #721c24;
+    border-color: #f5c6cb;
+    background: #f8d7da;
+}
+
+.button-danger:hover {
+    background: #f1b0b7;
+    border-color: #f5c6cb;
+}
+
+.button-success {
+    background: #5cb85c;
+    border-color: #4cae4c;
+    color: white;
+}
+
+.button-success:hover {
+    background: #449d44;
+    border-color: #398439;
+}
+
+/* Services layout */
+.time-tracker-services {
+    display: flex;
+    gap: 40px;
+    margin-top: 20px;
+}
+
+.time-tracker-services .services-list {
+    flex: 2;
+}
+
+.time-tracker-services .service-form {
+    flex: 1;
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    border-radius: 4px;
+}
+
+/* Entry info */
+.entry-info {
+    background: #f5f5f5;
+    padding: 15px;
+    border-left: 4px solid #0073aa;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.entry-info p {
+    margin: 5px 0;
+}
+
+/* Filters */
+.time-tracker-filters {
+    background: #fff;
+    padding: 15px;
+    border: 1px solid #ccd0d4;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.filter-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.filter-row:last-child {
+    margin-bottom: 0;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.filter-group label {
+    font-weight: bold;
+    min-width: 60px;
+}
+
+.filter-group select,
+.filter-group input[type="date"] {
+    padding: 5px;
+}
+
+/* Report styles - ZMIENIONE dla poprawy działania */
+.client-report {
+    margin-bottom: 40px;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 5px;
+}
+
+.client-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.summary-section {
+    margin-bottom: 20px;
+}
+
+.details-section h4 {
+    cursor: pointer;
+    color: #0073aa;
+    padding: 10px;
+    background: #f5f5f5;
+    border-radius: 3px;
+    margin-bottom: 10px;
+    user-select: none;
+    transition: background-color 0.3s ease;
+}
+
+.details-section h4:hover {
+    background: #e5e5e5;
+}
+
+.details-section h4 small {
+    color: #666;
+    font-weight: normal;
+}
+
+/* Poprawka dla sekcji rozwijanej - wyeliminowanie konfliktu z DataTables */
+.details-collapse {
+    display: none;
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+.details-collapse.active {
+    display: block;
+}
+
+.report-actions {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.grand-total {
+    margin-top: 30px;
+    padding: 20px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.report-summary,
+.report-details,
+.invoice-details,
+.report-by-employee,
+.report-by-service {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccd0d4;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.report-summary table {
+    width: 100%;
+}
+
+.report-summary td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.report-summary tr:last-child td {
+    border-bottom: none;
+}
+
+/* Status texts */
+.approved-text {
+    color: #5cb85c;
+    font-weight: bold;
+}
+
+.rejected-text {
+    color: #d9534f;
+    font-weight: bold;
+}
+
+.draft-text {
+    color: #f0ad4e;
+    font-weight: bold;
+}
+
+/* Entry actions */
+.entry-actions {
+    display: flex;
+    gap: 5px;
+}
+
+/* DataTables custom styling */
+.dataTables_wrapper {
+    margin-top: 20px;
+}
+
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter {
+    margin-bottom: 15px;
+}
+
+.dataTables_wrapper .dataTables_info {
+    padding-top: 10px;
+}
+
+/* Responsive styles */
+@media (max-width: 1200px) {
+    .time-tracker-services {
+        flex-direction: column;
+    }
+    
+    .time-tracker-services .services-list,
+    .time-tracker-services .service-form {
+        flex: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .time-tracker-widgets {
+        flex-direction: column;
+    }
+    
+    .filter-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .filter-group {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .filter-group label {
+        min-width: auto;
+        margin-bottom: 5px;
+    }
+    
+    .entry-actions {
+        flex-direction: column;
+        gap: 3px;
+    }
+    
+    .entry-actions .button {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .report-actions {
+        flex-direction: column;
+    }
+    
+    .report-actions .button {
+        width: 100%;
+        text-align: center;
+    }
+}

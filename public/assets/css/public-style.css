@@ -1,0 +1,221 @@
+/* Style publiczne dla Time Tracker */
+
+.time-tracker-form,
+.employee-summary {
+    max-width: 1000px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.time-tracker-form h2,
+.employee-summary h2 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 2px solid #0073aa;
+    padding-bottom: 10px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+.form-group select,
+.form-group input[type="date"],
+.form-group input[type="number"],
+.form-group input[type="text"],
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.form-group select:focus,
+.form-group input[type="date"]:focus,
+.form-group input[type="number"]:focus,
+.form-group input[type="text"]:focus,
+.form-group textarea:focus {
+    border-color: #0073aa;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0,115,170,0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 12px;
+}
+
+.form-group input[type="submit"],
+.form-group button {
+    padding: 12px 24px;
+    background: #0073aa;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background 0.3s;
+    margin-right: 10px;
+}
+
+.form-group input[type="submit"]:hover,
+.form-group button:hover {
+    background: #005a87;
+}
+
+.form-group .button-secondary {
+    background: #6c757d;
+}
+
+.form-group .button-secondary:hover {
+    background: #545b62;
+}
+
+.success {
+    background: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border-left: 4px solid #28a745;
+}
+
+.error {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border-left: 4px solid #dc3545;
+}
+
+.time-tracker-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.time-tracker-table th,
+.time-tracker-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.time-tracker-table th {
+    background: #f8f9fa;
+    font-weight: bold;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.time-tracker-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.time-tracker-table tfoot {
+    background: #f8f9fa;
+    font-weight: bold;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 20px;
+    margin: 30px 0;
+}
+
+.stat-box {
+    flex: 1;
+    background: linear-gradient(135deg, #0073aa, #005a87);
+    color: white;
+    padding: 25px;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.stat-box h3 {
+    margin: 0;
+    font-size: 2.5em;
+    font-weight: bold;
+}
+
+.stat-box p {
+    margin: 10px 0 0;
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-draft { background: #f0ad4e; color: white; }
+.status-submitted { background: #5bc0de; color: white; }
+.status-approved { background: #5cb85c; color: white; }
+.status-rejected { background: #d9534f; color: white; }
+
+.recent-entries {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #eee;
+}
+
+.recent-entries h3 {
+    color: #333;
+    margin-bottom: 15px;
+}
+
+/* Responsywność */
+@media (max-width: 768px) {
+    .time-tracker-form,
+    .employee-summary {
+        padding: 15px;
+        margin: 10px;
+    }
+    
+    .summary-stats {
+        flex-direction: column;
+    }
+    
+    .form-group input[type="submit"],
+    .form-group button {
+        display: block;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .time-tracker-table {
+        display: block;
+        overflow-x: auto;
+    }
+}
